@@ -56,29 +56,17 @@ def search_product():
         return jsonify({"error": "Product name is required"}), 400
     
     try:
-        # Create the response with web search enabled
-        response = client.responses.create(
-            model="gpt-4o",
-            input=f"Find a detailed product description, technical details, and usage instructions for '{product_name}' on MySkinRecipes.com. Format your response with clear sections for Description, Technical Details, and Usage Instructions.",
-            tools=[{"type": "web_search"}]
+        # Updated OpenAI API call
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a product information specialist."},
+                {"role": "user", "content": f"Find a detailed product description, technical details, and usage instructions for '{product_name}' on MySkinRecipes.com. Format your response with clear sections for Description, Technical Details, and Usage Instructions."}
+            ]
         )
         
-        # Wait for the response to complete
-        response_id = response.id
-        while response.status == "in_progress":
-            time.sleep(2)
-            response = client.responses.retrieve(response_id=response_id)
-        
         # Extract the text content
-        full_text = ""
-        if hasattr(response, 'output') and response.output:
-            for output_item in response.output:
-                if hasattr(output_item, 'content') and output_item.content:
-                    for content_item in output_item.content:
-                        if hasattr(content_item, 'text'):
-                            full_text += content_item.text + "\n"
-                elif hasattr(output_item, 'text'):
-                    full_text += output_item.text + "\n"
+        full_text = response.choices[0].message.content
         
         if not full_text:
             return jsonify({"error": "No content available in the response"}), 404
