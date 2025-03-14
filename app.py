@@ -1,10 +1,12 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # Add this import
 from openai import OpenAI
 import time
 from supabase import create_client, Client
 import os
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 # Add this new route
 @app.route('/', methods=['GET'])
