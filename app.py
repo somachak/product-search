@@ -6,6 +6,16 @@ import os
 
 app = Flask(__name__)
 
+# Add this new route
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({
+        "message": "Welcome to Product Search API",
+        "endpoints": {
+            "/search_product": "POST - Search for product information"
+        }
+    })
+
 # Initialize OpenAI client with your API key directly
 client = OpenAI(api_key="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")
 
