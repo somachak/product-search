@@ -164,17 +164,43 @@ def search_product():
                 "source": "database"
             })
         
-        # Updated OpenAI API call
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a product information specialist."},
-                {"role": "user", "content": f"Find a detailed product description, technical details, and usage instructions for '{product_name}' on MySkinRecipes.com. Format your response with clear sections for Description, Technical Details, and Usage Instructions."}
-            ]
+        # Updated OpenAI API call using responses.create
+        response = client.responses.create(
+          model="gpt-4o",
+          input=[
+            {
+              "role": "system",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Search for single or bulk ingredients provided by the user on myskinrecipes.com and return detailed descriptions, formulation information, and technical details. This includes usage rates, regional compliance, and links to the product page. Also, suggest popular products using these ingredients from EWG Skin Deep and INCIDECODER.com.\n\n# Steps\n\n1. **Input Capture**: Receive single or bulk ingredient names from the user.\n2. **Search and Retrieve**: Conduct searches for each ingredient on myskinrecipes.com.\n3. **Information Extraction**:\n   - Obtain detailed descriptions of each ingredient.\n   - Extract formulation details, including usage rates and recommended applications.\n   - Gather technical details such as regional compliance information.\n4. **Link Collection**: Provide a direct link to the product page for each ingredient on myskinrecipes.com.\n5. **Additional Product Suggestions**:\n   - Search EWG Skin Deep and INCIDECODER.com for popular products utilizing these ingredients.\n   - Compile a list of suggested products and provide relevant descriptions or ratings if available.\n\n# Output Format\n\nThe output should be structured in a JSON format with the following fields for each ingredient:\n- `ingredient_name`: The name of the ingredient.\n- `description`: A detailed description of the ingredient.\n- `formulation_details`: Information on formulation, including usage rates.\n- `technical_details`: Information on regional compliance and technical specifications.\n- `product_page_link`: URL to the myskinrecipes.com product page.\n- `suggested_products`: \n  - `ewg`: A list of popular products from EWG Skin Deep including descriptions or ratings.\n  - `incidecoder`: A list of popular products from INCIDECODER.com including descriptions or ratings.\n\n# Examples\n\n### Example Input\n```json\n{\n  \"ingredients\": [\"Ingredient A\", \"Ingredient B\"]\n}\n```\n\n### Example Output\n```json\n[\n  {\n    \"ingredient_name\": \"Ingredient A\",\n    \"description\": \"Detailed description of Ingredient A.\",\n    \"formulation_details\": \"Usage rate and recommendations for Ingredient A.\",\n    \"technical_details\": \"Regional compliance information for Ingredient A.\",\n    \"product_page_link\": \"https://www.myskinrecipes.com/ingredientA\",\n    \"suggested_products\": {\n      \"ewg\": [\n        {\n          \"product_name\": \"Product 1\",\n          \"description\": \"Details about Product 1 using Ingredient A.\"\n        }\n      ],\n      \"incidecoder\": [\n        {\n          \"product_name\": \"Product 2\",\n          \"description\": \"Details about Product 2 using Ingredient A.\"\n        }\n      ]\n    }\n  },\n  {\n    \"ingredient_name\": \"Ingredient B\",\n    \"description\": \"Detailed description of Ingredient B.\",\n    \"formulation_details\": \"Usage rate and recommendations for Ingredient B.\",\n    \"technical_details\": \"Regional compliance information for Ingredient B.\",\n    \"product_page_link\": \"https://www.myskinrecipes.com/ingredientB\",\n    \"suggested_products\": {\n      \"ewg\": [\n        {\n          \"product_name\": \"Product 3\",\n          \"description\": \"Details about Product 3 using Ingredient B.\"\n        }\n      ],\n      \"incidecoder\": [\n        {\n          \"product_name\": \"Product 4\",\n          \"description\": \"Details about Product 4 using Ingredient B.\"\n        }\n      ]\n    }\n  }\n]\n```\n\n# Notes\n\n- Ensure that all information is retrieved and presented accurately.\n- Use available APIs or scraping methods within legal and ethical bounds.\n- Provide comprehensive and concise descriptions and details for user clarity."
+                }
+              ]
+            }
+          ],
+          text={
+            "format": {
+              "type": "text"
+            }
+          },
+          reasoning={},
+          tools=[
+            {
+              "type": "web_search_preview",
+              "user_location": {
+                "type": "approximate"
+              },
+              "search_context_size": "medium"
+            }
+          ],
+          temperature=1,
+          max_output_tokens=2048,
+          top_p=1,
+          store=True
         )
         
         # Extract the text content
-        full_text = response.choices[0].message.content
+        full_text = response.text
         
         if not full_text:
             return jsonify({"error": "No information available for this product. Please check the spelling or try a different product."}), 404
@@ -303,32 +329,35 @@ Please provide:
 
 Format your response in a structured way with clear headings for each section."""
                 
-                # Make the API call with the exact prompts from playground
-                response = client.chat.completions.create(
-                    model="gpt-4o-search-preview",
-                    web_search_options={
-                        "search_context_size": "high",
-                    },
-                    # Remove the temperature parameter as it's causing the error
-                    # temperature=0.7,  # Match playground settings
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ]
-                )
-                
-                # Extract the text content
-                full_text = response.choices[0].message.content
-                
-                # Extract citations if available
-                citations = []
-                if hasattr(response.choices[0].message, 'annotations'):
-                    for annotation in response.choices[0].message.annotations:
-                        if annotation.type == "url_citation" and hasattr(annotation, 'url_citation'):
-                            citations.append({
-                                "url": annotation.url_citation.url,
-                                "title": annotation.url_citation.title
-                            })
+                try:
+                    # Make the API call with the exact prompts from playground
+                    response = client.chat.completions.create(
+                        model="gpt-4o-search-preview",
+                        web_search_options={
+                            "search_context_size": "high",
+                        },
+                        # Remove the temperature parameter as it's causing the error
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ]
+                    )
+                    
+                    # Extract the text content
+                    full_text = response.choices[0].message.content
+                    
+                    # Extract citations if available
+                    citations = []
+                    if hasattr(response.choices[0].message, 'annotations'):
+                        for annotation in response.choices[0].message.annotations:
+                            if annotation.type == "url_citation" and hasattr(annotation, 'url_citation'):
+                                citations.append({
+                                    "url": annotation.url_citation.url,
+                                    "title": annotation.url_citation.title
+                                })
+                except Exception as api_error:
+                    print(f"OpenAI API error for ingredient '{ingredient}': {api_error}")
+                    continue  # Skip to the next tier
                 
                 if not full_text or "ingredient not found" in full_text.lower() or "not found" in full_text.lower() or "couldn't find" in full_text.lower():
                     # If not found in this tier, continue to next tier
