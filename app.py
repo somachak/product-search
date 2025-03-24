@@ -157,14 +157,18 @@ def search_product():
         existing = supabase.table("products").select("*").eq("product_name", product_name).eq("item_type", "product").execute()
         
         if existing.data:
-            # Return existing data if found
+            # Return existing data in the simplified format with three columns
             return jsonify({
                 "success": True,
-                "product": existing.data[0],
+                "product": {
+                    "name": existing.data[0]['product_name'],
+                    "index": existing.data[0]['id'],
+                    "text_description": existing.data[0]['description']
+                },
                 "source": "database"
             })
         
-        # Updated OpenAI API call using responses.create
+        # Rest of the OpenAI API call remains the same
         response = client.responses.create(
           model="gpt-4o",
           input=[
@@ -217,13 +221,11 @@ def search_product():
         
         # Store in Supabase only if we have meaningful data
         if any(product_details.values()):
+            # Simplified data structure with only 3 columns
             data = {
                 "product_name": product_name,
                 "description": product_details["description"],
-                "technical_details": product_details["technical_details"],
-                "usage_instructions": product_details["usage_instructions"],
-                "item_type": "product",  # Add item type to distinguish between products and ingredients
-                "created_at": "now()"
+                "item_type": "product"  # Keep this to distinguish between products and ingredients
             }
             
             result = supabase.table("products").insert(data).execute()
@@ -231,16 +233,13 @@ def search_product():
             if not result.data:
                 return jsonify({"error": "Failed to save product to database"}), 500
                 
-            # Return the product details to the client
+            # Return the product details to the client with only 3 columns
             return jsonify({
                 "success": True,
                 "product": {
-                    "id": result.data[0]['id'],
                     "name": product_name,
-                    "description": product_details["description"],
-                    "technical_details": product_details["technical_details"],
-                    "usage_instructions": product_details["usage_instructions"],
-                    "item_type": "product"
+                    "index": result.data[0]['id'],
+                    "text_description": product_details["description"]
                 },
                 "source": "api"
             })
@@ -453,26 +452,23 @@ Format your response in a structured way with clear headings for each section.""
                         
                         # Store in database
                         import json
+                        # When storing in database, simplify to 3 columns
                         data = {
                             "product_name": ingredient,
                             "description": ingredient_details.get("description", ""),
-                            "technical_details": ingredient_details.get("technical_details", ""),
-                            "usage_instructions": "",  # Not directly mapped in our new structure
-                            "formulation_details": ingredient_details.get("formulation_details", ""),
-                            "product_page_link": ingredient_details.get("product_page_link", ""),
-                            "source_website": ingredient_details.get("source_website", ""),
-                            "search_tier": ingredient_details.get("search_tier", ""),
-                            "suggested_products": json.dumps(ingredient_details.get("suggested_products", {"ewg": [], "incidecoder": []})),
-                            "item_type": "ingredient",
-                            "created_at": "now()"
+                            "item_type": "ingredient"
                         }
                         
                         # Insert into database
                         result = supabase.table("products").insert(data).execute()
                         
                         if result.data:
-                            # Add to results
-                            results.append(result.data[0])
+                            # Add to results with simplified structure
+                            results.append({
+                                "name": ingredient,
+                                "index": result.data[0]['id'],
+                                "text_description": ingredient_details.get("description", "")
+                            })
                         else:
                             not_found.append(ingredient)
                 except Exception as e:
