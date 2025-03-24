@@ -3,62 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API Test with Raw Responses</title>
+    <title>OpenAI API Test Console</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; }
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
         .result { margin-top: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
-        th { background-color: #f2f2f2; }
+        pre { white-space: pre-wrap; background: #f5f5f5; padding: 10px; border-radius: 5px; }
         .error { color: red; }
         .status { margin-top: 10px; padding: 5px; border-radius: 3px; }
         .status.online { background-color: #d4edda; color: #155724; }
         .status.offline { background-color: #f8d7da; color: #721c24; }
-        textarea { width: 100%; min-height: 100px; }
-        .raw-response { 
-            background-color: #f8f9fa; 
-            padding: 10px; 
-            border: 1px solid #ddd; 
-            border-radius: 5px; 
-            margin-top: 10px;
-            white-space: pre-wrap;
-            font-family: monospace;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        .tab-container {
-            margin-top: 20px;
-        }
-        .tab {
-            overflow: hidden;
-            border: 1px solid #ccc;
-            background-color: #f1f1f1;
-            border-radius: 5px 5px 0 0;
-        }
-        .tab button {
-            background-color: inherit;
-            float: left;
-            border: none;
-            outline: none;
-            cursor: pointer;
-            padding: 10px 16px;
-            transition: 0.3s;
-        }
-        .tab button:hover {
-            background-color: #ddd;
-        }
-        .tab button.active {
-            background-color: #ccc;
-        }
-        .tabcontent {
-            display: none;
+        textarea { width: 100%; min-height: 100px; margin: 10px 0; }
+        button { padding: 10px; margin: 5px; cursor: pointer; }
+        .response-container { margin-top: 20px; }
+        .raw-response, .parsed-response {
+            background-color: #f8f9fa;
             padding: 15px;
-            border: 1px solid #ccc;
-            border-top: none;
-            border-radius: 0 0 5px 5px;
-        }
-        .show {
-            display: block;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-top: 10px;
+            overflow-x: auto;
         }
         .debug-info {
             margin-top: 20px;
@@ -67,330 +30,100 @@
             border: 1px solid #ddd;
             border-radius: 5px;
         }
-        .retry-button {
-            margin-top: 10px;
-            padding: 5px 10px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-        }
-        .retry-button:hover {
-            background-color: #0069d9;
-        }
     </style>
 </head>
 <body>
-    <h1>Product Search API Test</h1>
+    <h1>OpenAI API Test Console</h1>
     
     <div id="apiStatus" class="status offline">Checking API connection...</div>
-    <button id="retryConnection" class="retry-button" onclick="checkApiConnection(true)">Retry Connection</button>
-    <div id="debugInfo" class="debug-info">
+    
+    <div class="debug-info">
         <h3>Debug Information</h3>
-        <p>If you're seeing "Failed to fetch" errors, check the following:</p>
-        <ol>
-            <li>Make sure your Flask server is running (python app.py)</li>
-            <li>Check that the server is running on port 10000</li>
-            <li>Verify CORS is properly configured in your Flask app</li>
-            <li>Check browser console for more detailed error messages</li>
-        </ol>
         <div id="connectionLogs"></div>
     </div>
-    
-    <div class="tab-container">
-        <div class="tab">
-            <button class="tablinks active" onclick="openTab(event, 'ProductTab')">Search Product</button>
-            <button class="tablinks" onclick="openTab(event, 'IngredientsTab')">Search Ingredients</button>
-        </div>
+
+    <div class="search-container">
+        <h2>Test OpenAI API</h2>
+        <textarea id="searchInput" placeholder="Enter an ingredient name (e.g., 'Polyglyceryl-3 Polyricinoleate')"></textarea>
+        <button onclick="testApi()">Search</button>
         
-        <div id="ProductTab" class="tabcontent show">
-            <h2>Search Product</h2>
-            <input type="text" id="productName" placeholder="Enter product name">
-            <button onclick="searchProduct()">Search</button>
-            <div id="productResult" class="result"></div>
-            <div id="rawProductResponse" class="raw-response" style="display: none;"></div>
-        </div>
-        
-        <div id="IngredientsTab" class="tabcontent">
-            <h2>Search Ingredients</h2>
-            <textarea id="ingredients" placeholder="Enter ingredients, one per line"></textarea>
-            <button onclick="searchIngredients()">Search</button>
-            <div id="ingredientsResult" class="result"></div>
-            <div id="rawIngredientsContainer" style="margin-top: 20px;"></div>
+        <div class="response-container">
+            <h3>Raw Response:</h3>
+            <pre id="rawResponse" class="raw-response"></pre>
+            
+            <h3>Parsed JSON Response:</h3>
+            <pre id="parsedResponse" class="parsed-response"></pre>
         </div>
     </div>
 
     <script>
-        // Try different API URLs if one fails
-        const API_URLS = [
-            'http://localhost:10000',
-            'http://127.0.0.1:10000',
-            'http://0.0.0.0:10000'
-        ];
-        
-        let API_URL = API_URLS[0]; // Default to first URL
-        
-        // Check API connection on page load
-        window.addEventListener('DOMContentLoaded', function() {
-            checkApiConnection();
-            document.getElementById('ProductTab').style.display = 'block';
-        });
-        
-        function openTab(evt, tabName) {
-            var i, tabcontent, tablinks;
-            
-            tabcontent = document.getElementsByClassName("tabcontent");
-            for (i = 0; i < tabcontent.length; i++) {
-                tabcontent[i].style.display = "none";
-            }
-            
-            tablinks = document.getElementsByClassName("tablinks");
-            for (i = 0; i < tablinks.length; i++) {
-                tablinks[i].className = tablinks[i].className.replace(" active", "");
-            }
-            
-            document.getElementById(tabName).style.display = "block";
-            evt.currentTarget.className += " active";
-        }
-        
-        async function checkApiConnection(isRetry = false) {
+        const API_URL = 'http://localhost:10000';
+
+        async function checkApiConnection() {
             const statusDiv = document.getElementById('apiStatus');
             const logsDiv = document.getElementById('connectionLogs');
             
-            if (isRetry) {
-                logsDiv.innerHTML = '<p>Retrying connection...</p>' + logsDiv.innerHTML;
-            } else {
-                logsDiv.innerHTML = '<p>Checking API connection...</p>';
-            }
-            
-            statusDiv.textContent = 'Checking API connection...';
-            statusDiv.className = 'status offline';
-            
-            for (const url of API_URLS) {
-                try {
-                    logsDiv.innerHTML = `<p>Trying ${url}...</p>` + logsDiv.innerHTML;
-                    console.log(`Trying to connect to ${url}...`);
-                    
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-                    
-                    const response = await fetch(`${url}/`, {
-                        method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        signal: controller.signal
-                    });
-                    
-                    clearTimeout(timeoutId);
-                    
-                    if (response.ok) {
-                        API_URL = url;
-                        statusDiv.textContent = `API Connected: ${API_URL}`;
-                        statusDiv.className = 'status online';
-                        logsDiv.innerHTML = `<p>Successfully connected to ${url}</p>` + logsDiv.innerHTML;
-                        console.log(`Successfully connected to ${url}`);
-                        return;
-                    } else {
-                        logsDiv.innerHTML = `<p>Failed to connect to ${url}: HTTP ${response.status}</p>` + logsDiv.innerHTML;
-                        console.log(`Failed to connect to ${url}: HTTP ${response.status}`);
-                    }
-                } catch (error) {
-                    let errorMessage = error.message;
-                    if (error.name === 'AbortError') {
-                        errorMessage = 'Connection timeout (5s)';
-                    }
-                    logsDiv.innerHTML = `<p>Failed to connect to ${url}: ${errorMessage}</p>` + logsDiv.innerHTML;
-                    console.log(`Failed to connect to ${url}: ${errorMessage}`);
-                }
-            }
-            
-            statusDiv.textContent = 'API Offline: Failed to connect to any endpoint. Make sure the server is running.';
-            statusDiv.className = 'status offline';
-            logsDiv.innerHTML = '<p>All connection attempts failed. Check if your server is running.</p>' + logsDiv.innerHTML;
-        }
-        
-        async function searchProduct() {
-            const productName = document.getElementById('productName').value;
-            if (!productName) {
-                alert('Please enter a product name');
-                return;
-            }
-            
-            const resultDiv = document.getElementById('productResult');
-            const rawResponseDiv = document.getElementById('rawProductResponse');
-            
-            resultDiv.innerHTML = '<p>Searching...</p>';
-            rawResponseDiv.style.display = 'none';
-            
             try {
-                console.log(`Sending request to ${API_URL}/search_product with product name: ${productName}`);
-                
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-                
-                const response = await fetch(`${API_URL}/search_product`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({ product_name: productName }),
-                    signal: controller.signal
-                });
-                
-                clearTimeout(timeoutId);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                console.log('Received response:', data);
-                
-                if (data.success) {
-                    // Display the product data
-                    resultDiv.innerHTML = `
-                        <h3>Product Found (Source: ${data.source})</h3>
-                        <table>
-                            <tr>
-                                <th>Name</th>
-                                <th>Index</th>
-                                <th>Description</th>
-                            </tr>
-                            <tr>
-                                <td>${data.product.name}</td>
-                                <td>${data.product.index}</td>
-                                <td>${data.product.text_description}</td>
-                            </tr>
-                        </table>
-                    `;
-                    
-                    // Display raw response if available
-                    if (data.raw_openai_response) {
-                        rawResponseDiv.textContent = data.raw_openai_response;
-                        rawResponseDiv.style.display = 'block';
-                        resultDiv.innerHTML += '<h3>Raw OpenAI Response:</h3>';
-                        resultDiv.appendChild(rawResponseDiv);
-                    }
-                    
-                    // Display parsed details if available
-                    if (data.parsed_details) {
-                        resultDiv.innerHTML += `
-                            <h3>Parsed Details:</h3>
-                            <pre>${JSON.stringify(data.parsed_details, null, 2)}</pre>
-                        `;
-                    }
+                const response = await fetch(`${API_URL}/`);
+                if (response.ok) {
+                    statusDiv.textContent = 'API Connected';
+                    statusDiv.className = 'status online';
+                    logsDiv.innerHTML = '<p>Successfully connected to API</p>';
                 } else {
-                    resultDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
             } catch (error) {
-                let errorMessage = error.message;
-                if (error.name === 'AbortError') {
-                    errorMessage = 'Request timed out after 30 seconds. The server might be busy or not responding.';
-                }
-                resultDiv.innerHTML = `<p class="error">Error: ${errorMessage}</p>`;
-                console.error('Search product error:', error);
+                statusDiv.textContent = 'API Offline';
+                statusDiv.className = 'status offline';
+                logsDiv.innerHTML = `<p>Failed to connect: ${error.message}</p>`;
             }
         }
-        
-        async function searchIngredients() {
-            const ingredientsText = document.getElementById('ingredients').value;
-            if (!ingredientsText) {
-                alert('Please enter at least one ingredient');
+
+        async function testApi() {
+            const ingredient = document.getElementById('searchInput').value.trim();
+            if (!ingredient) {
+                alert('Please enter an ingredient name');
                 return;
             }
+
+            const rawResponseDiv = document.getElementById('rawResponse');
+            const parsedResponseDiv = document.getElementById('parsedResponse');
             
-            const ingredients = ingredientsText.split('\n').map(i => i.trim()).filter(i => i);
-            const resultDiv = document.getElementById('ingredientsResult');
-            const rawContainer = document.getElementById('rawIngredientsContainer');
-            
-            resultDiv.innerHTML = '<p>Searching...</p>';
-            rawContainer.innerHTML = '';
-            
+            rawResponseDiv.textContent = 'Searching...';
+            parsedResponseDiv.textContent = '';
+
             try {
-                const response = await fetch(`${API_URL}/search_ingredients`, {
+                const response = await fetch(`${API_URL}/console_test`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
+                        'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ ingredients })
+                    body: JSON.stringify({ ingredient })
                 });
-                
+
                 if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                
+
                 const data = await response.json();
                 
-                if (data.success) {
-                    let html = '<h3>Ingredients Found</h3>';
-                    
-                    if (data.ingredients && data.ingredients.length > 0) {
-                        html += `
-                            <table>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Index</th>
-                                    <th>Description</th>
-                                    <th>Formulation Details</th>
-                                    <th>Technical Details</th>
-                                    <th>Product Page Link</th>
-                                    <th>Search Tier</th>
-                                </tr>
-                        `;
-                        
-                        data.ingredients.forEach(ingredient => {
-                            html += `
-                                <tr>
-                                    <td>${ingredient.name || ''}</td>
-                                    <td>${ingredient.index || ''}</td>
-                                    <td>${ingredient.text_description || ''}</td>
-                                    <td>${ingredient.formulation_details || ''}</td>
-                                    <td>${ingredient.technical_details || ''}</td>
-                                    <td><a href="${ingredient.product_page_link || '#'}" target="_blank">${ingredient.product_page_link || ''}</a></td>
-                                    <td>${ingredient.search_tier || ''}</td>
-                                </tr>
-                            `;
-                        });
-                        
-                        html += '</table>';
-                    } else {
-                        html += '<p>No ingredients found.</p>';
-                    }
-                    
-                    if (data.not_found && data.not_found.length > 0) {
-                        html += `<h4>Not Found:</h4><p>${data.not_found.join(', ')}</p>`;
-                    }
-                    
-                    resultDiv.innerHTML = html;
-                    
-                    // Display raw responses
-                    if (data.raw_responses) {
-                        rawContainer.innerHTML = '<h3>Raw OpenAI Responses:</h3>';
-                        
-                        for (const [ingredient, rawResponse] of Object.entries(data.raw_responses)) {
-                            const rawDiv = document.createElement('div');
-                            rawDiv.innerHTML = `<h4>${ingredient}</h4>`;
-                            
-                            const pre = document.createElement('pre');
-                            pre.className = 'raw-response';
-                            pre.textContent = rawResponse;
-                            
-                            rawDiv.appendChild(pre);
-                            rawContainer.appendChild(rawDiv);
-                        }
-                    }
+                // Display raw response
+                rawResponseDiv.textContent = data.raw_response || 'No raw response available';
+                
+                // Display parsed JSON if available
+                if (data.parsed_json) {
+                    parsedResponseDiv.textContent = JSON.stringify(data.parsed_json, null, 2);
                 } else {
-                    resultDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+                    parsedResponseDiv.textContent = 'No parsed JSON available';
                 }
             } catch (error) {
-                resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
-                console.error('Search ingredients error:', error);
+                rawResponseDiv.textContent = `Error: ${error.message}`;
+                parsedResponseDiv.textContent = '';
             }
         }
+
+        // Check API connection when page loads
+        window.addEventListener('DOMContentLoaded', checkApiConnection);
     </script>
 </body>
 </html>
