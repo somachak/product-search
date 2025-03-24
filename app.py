@@ -6,8 +6,14 @@ from supabase import create_client, Client
 import os
 
 app = Flask(__name__)
-# Enable CORS with more specific settings
-CORS(app, resources={r"/*": {"origins": "*", "allow_headers": "*", "expose_headers": "*"}})
+# Update CORS configuration to be more permissive for testing
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Add this new route
 @app.route('/', methods=['GET'])

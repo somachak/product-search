@@ -58,13 +58,21 @@
 
     <script>
         const API_URL = 'http://localhost:10000';
-
+    
         async function checkApiConnection() {
             const statusDiv = document.getElementById('apiStatus');
             const logsDiv = document.getElementById('connectionLogs');
             
             try {
-                const response = await fetch(`${API_URL}/`);
+                const response = await fetch(`${API_URL}/`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    // Add timeout
+                    signal: AbortSignal.timeout(5000)
+                });
+                
                 if (response.ok) {
                     statusDiv.textContent = 'API Connected';
                     statusDiv.className = 'status online';
@@ -73,57 +81,77 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
             } catch (error) {
+                let errorMessage = error.message;
+                if (error.name === 'TimeoutError') {
+                    errorMessage = 'Connection timed out. Is the server running?';
+                }
                 statusDiv.textContent = 'API Offline';
                 statusDiv.className = 'status offline';
-                logsDiv.innerHTML = `<p>Failed to connect: ${error.message}</p>`;
+                logsDiv.innerHTML = `
+                    <p>Failed to connect: ${errorMessage}</p>
+                    <p>Please ensure:</p>
+                    <ul>
+                        <li>Flask server is running (python3 app.py)</li>
+                        <li>Server is running on port 10000</li>
+                        <li>No firewall is blocking the connection</li>
+                    </ul>
+                `;
             }
         }
-
+    
         async function testApi() {
             const ingredient = document.getElementById('searchInput').value.trim();
             if (!ingredient) {
                 alert('Please enter an ingredient name');
                 return;
             }
-
+    
             const rawResponseDiv = document.getElementById('rawResponse');
             const parsedResponseDiv = document.getElementById('parsedResponse');
             
             rawResponseDiv.textContent = 'Searching...';
             parsedResponseDiv.textContent = '';
-
+    
             try {
                 const response = await fetch(`${API_URL}/console_test`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ ingredient })
+                    body: JSON.stringify({ ingredient }),
+                    // Add timeout
+                    signal: AbortSignal.timeout(30000)
                 });
-
+    
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-
+    
                 const data = await response.json();
                 
-                // Display raw response
                 rawResponseDiv.textContent = data.raw_response || 'No raw response available';
                 
-                // Display parsed JSON if available
                 if (data.parsed_json) {
                     parsedResponseDiv.textContent = JSON.stringify(data.parsed_json, null, 2);
                 } else {
                     parsedResponseDiv.textContent = 'No parsed JSON available';
                 }
             } catch (error) {
-                rawResponseDiv.textContent = `Error: ${error.message}`;
+                let errorMessage = error.message;
+                if (error.name === 'TimeoutError') {
+                    errorMessage = 'Request timed out. The server might be busy.';
+                }
+                rawResponseDiv.textContent = `Error: ${errorMessage}`;
                 parsedResponseDiv.textContent = '';
             }
         }
-
-        // Check API connection when page loads
-        window.addEventListener('DOMContentLoaded', checkApiConnection);
+    
+        // Check API connection when page loads and every 30 seconds
+        window.addEventListener('DOMContentLoaded', () => {
+            checkApiConnection();
+            setInterval(checkApiConnection, 30000);
+        });
     </script>
 </body>
 </html>
