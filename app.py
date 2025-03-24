@@ -464,105 +464,34 @@ def search_ingredients():
 
 @app.route('/console_test', methods=['POST'])
 def console_test():
-    data = request.json
-    ingredient = data.get('ingredient')
-    
-    if not ingredient:
-        return jsonify({"error": "Ingredient name is required"}), 400
-    
     try:
-        print(f"\n{'='*80}")
-        print(f"TESTING OPENAI API WITH INGREDIENT: {ingredient}")
-        print(f"{'='*80}\n")
+        data = request.json
+        ingredient = data.get('ingredient')
         
-        # Use the responses.create API
-        response = client.responses.create(
-          model="gpt-4o",
-          input=[
-            {
-              "role": "system",
-              "content": [
-                {
-                  "type": "input_text",
-                  "text": "Search for single or bulk ingredients provided by the user on myskinrecipes.com and return detailed descriptions, formulation information, and technical details. This includes usage rates, regional compliance, and links to the product page. Also, suggest popular products using these ingredients from EWG Skin Deep and INCIDECODER.com.\n\n# Steps\n\n1. **Input Capture**: Receive single or bulk ingredient names from the user.\n2. **Search and Retrieve**: Conduct searches for each ingredient on myskinrecipes.com.\n3. **Information Extraction**:\n   - Obtain detailed descriptions of each ingredient.\n   - Extract formulation details, including usage rates and recommended applications.\n   - Gather technical details such as regional compliance information.\n4. **Link Collection**: Provide a direct link to the product page for each ingredient on myskinrecipes.com.\n5. **Additional Product Suggestions**:\n   - Search EWG Skin Deep and INCIDECODER.com for popular products utilizing these ingredients.\n   - Compile a list of suggested products and provide relevant descriptions or ratings if available.\n\n# Output Format\n\nThe output should be structured in a JSON format with the following fields for each ingredient:\n- `ingredient_name`: The name of the ingredient.\n- `description`: A detailed description of the ingredient.\n- `formulation_details`: Information on formulation, including usage rates.\n- `technical_details`: Information on regional compliance and technical specifications.\n- `product_page_link`: URL to the myskinrecipes.com product page.\n- `suggested_products`: \n  - `ewg`: A list of popular products from EWG Skin Deep including descriptions or ratings.\n  - `incidecoder`: A list of popular products from INCIDECODER.com including descriptions or ratings.\n\n# Examples\n\n### Example Input\n```json\n{\n  \"ingredients\": [\"Ingredient A\", \"Ingredient B\"]\n}\n```\n\n### Example Output\n```json\n[\n  {\n    \"ingredient_name\": \"Ingredient A\",\n    \"description\": \"Detailed description of Ingredient A.\",\n    \"formulation_details\": \"Usage rate and recommendations for Ingredient A.\",\n    \"technical_details\": \"Regional compliance information for Ingredient A.\",\n    \"product_page_link\": \"https://www.myskinrecipes.com/ingredientA\",\n    \"suggested_products\": {\n      \"ewg\": [\n        {\n          \"product_name\": \"Product 1\",\n          \"description\": \"Details about Product 1 using Ingredient A.\"\n        }\n      ],\n      \"incidecoder\": [\n        {\n          \"product_name\": \"Product 2\",\n          \"description\": \"Details about Product 2 using Ingredient A.\"\n        }\n      ]\n    }\n  },\n  {\n    \"ingredient_name\": \"Ingredient B\",\n    \"description\": \"Detailed description of Ingredient B.\",\n    \"formulation_details\": \"Usage rate and recommendations for Ingredient B.\",\n    \"technical_details\": \"Regional compliance information for Ingredient B.\",\n    \"product_page_link\": \"https://www.myskinrecipes.com/ingredientB\",\n    \"suggested_products\": {\n      \"ewg\": [\n        {\n          \"product_name\": \"Product 3\",\n          \"description\": \"Details about Product 3 using Ingredient B.\"\n        }\n      ],\n      \"incidecoder\": [\n        {\n          \"product_name\": \"Product 4\",\n          \"description\": \"Details about Product 4 using Ingredient B.\"\n        }\n      ]\n    }\n  }\n]\n```\n\n# Notes\n\n- Ensure that all information is retrieved and presented accurately.\n- Use available APIs or scraping methods within legal and ethical bounds.\n- Provide comprehensive and concise descriptions and details for user clarity."
-                }
-              ]
-            },
-            {
-              "role": "user",
-              "content": [
-                {
-                  "type": "input_text",
-                  "text": ingredient
-                }
-              ]
-            }
-          ],
-          text={
-            "format": {
-              "type": "text"
-            }
-          },
-          reasoning={},
-          tools=[
-            {
-              "type": "web_search_preview",
-              "user_location": {
-                "type": "approximate"
-              },
-              "search_context_size": "medium"
-            }
-          ],
-          temperature=1,
-          max_output_tokens=2048,
-          top_p=1,
-          store=True
+        if not ingredient:
+            return jsonify({"error": "Ingredient name is required"}), 400
+        
+        print(f"\nSearching for: {ingredient}")
+        
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant with expertise in cosmetic ingredients."},
+                {"role": "user", "content": f"Please provide detailed information about {ingredient}, including its uses in cosmetics, technical details, and safety information."}
+            ]
         )
         
-        # Print the raw response to console
-        print("\nRAW RESPONSE:")
-        print(f"{'='*80}")
-        print(response.text)
-        print(f"{'='*80}\n")
-        
-        # Try to parse as JSON if possible
-        try:
-            # Look for JSON structure in the response
-            import re
-            import json
-            json_match = re.search(r'```json\n(.*?)\n```', response.text, re.DOTALL)
-            
-            if json_match:
-                json_str = json_match.group(1)
-                parsed_json = json.loads(json_str)
-                print("\nPARSED JSON:")
-                print(f"{'='*80}")
-                print(json.dumps(parsed_json, indent=2))
-                print(f"{'='*80}\n")
-                
-                return jsonify({
-                    "success": True,
-                    "raw_response": response.text,
-                    "parsed_json": parsed_json
-                })
-        except Exception as json_error:
-            print(f"JSON parsing error: {json_error}")
+        # Extract the response text
+        response_text = response.choices[0].message.content
         
         return jsonify({
             "success": True,
-            "raw_response": response.text
+            "raw_response": response_text
         })
         
     except Exception as e:
-        error_message = str(e)
-        print(f"\nERROR: {error_message}")
-        return jsonify({"error": error_message}), 500
+        print(f"Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
-if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 10000))
-    # Add additional error handling and logging
-    try:
-        print(f"Starting server on port {port}...")
-        app.run(host='0.0.0.0', port=port, debug=False)
-    except Exception as e:
-        print(f"Error starting server: {e}")
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000, debug=True)
