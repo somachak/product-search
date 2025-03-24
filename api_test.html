@@ -60,12 +60,43 @@
         .show {
             display: block;
         }
+        .debug-info {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .retry-button {
+            margin-top: 10px;
+            padding: 5px 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .retry-button:hover {
+            background-color: #0069d9;
+        }
     </style>
 </head>
 <body>
     <h1>Product Search API Test</h1>
     
     <div id="apiStatus" class="status offline">Checking API connection...</div>
+    <button id="retryConnection" class="retry-button" onclick="checkApiConnection(true)">Retry Connection</button>
+    <div id="debugInfo" class="debug-info">
+        <h3>Debug Information</h3>
+        <p>If you're seeing "Failed to fetch" errors, check the following:</p>
+        <ol>
+            <li>Make sure your Flask server is running (python app.py)</li>
+            <li>Check that the server is running on port 10000</li>
+            <li>Verify CORS is properly configured in your Flask app</li>
+            <li>Check browser console for more detailed error messages</li>
+        </ol>
+        <div id="connectionLogs"></div>
+    </div>
     
     <div class="tab-container">
         <div class="tab">
@@ -123,31 +154,61 @@
             evt.currentTarget.className += " active";
         }
         
-        async function checkApiConnection() {
+        async function checkApiConnection(isRetry = false) {
             const statusDiv = document.getElementById('apiStatus');
+            const logsDiv = document.getElementById('connectionLogs');
+            
+            if (isRetry) {
+                logsDiv.innerHTML = '<p>Retrying connection...</p>' + logsDiv.innerHTML;
+            } else {
+                logsDiv.innerHTML = '<p>Checking API connection...</p>';
+            }
+            
+            statusDiv.textContent = 'Checking API connection...';
+            statusDiv.className = 'status offline';
             
             for (const url of API_URLS) {
                 try {
+                    logsDiv.innerHTML = `<p>Trying ${url}...</p>` + logsDiv.innerHTML;
+                    console.log(`Trying to connect to ${url}...`);
+                    
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+                    
                     const response = await fetch(`${url}/`, {
                         method: 'GET',
                         headers: {
                             'Content-Type': 'application/json'
-                        }
+                        },
+                        signal: controller.signal
                     });
+                    
+                    clearTimeout(timeoutId);
                     
                     if (response.ok) {
                         API_URL = url;
                         statusDiv.textContent = `API Connected: ${API_URL}`;
                         statusDiv.className = 'status online';
+                        logsDiv.innerHTML = `<p>Successfully connected to ${url}</p>` + logsDiv.innerHTML;
+                        console.log(`Successfully connected to ${url}`);
                         return;
+                    } else {
+                        logsDiv.innerHTML = `<p>Failed to connect to ${url}: HTTP ${response.status}</p>` + logsDiv.innerHTML;
+                        console.log(`Failed to connect to ${url}: HTTP ${response.status}`);
                     }
                 } catch (error) {
-                    console.log(`Failed to connect to ${url}: ${error.message}`);
+                    let errorMessage = error.message;
+                    if (error.name === 'AbortError') {
+                        errorMessage = 'Connection timeout (5s)';
+                    }
+                    logsDiv.innerHTML = `<p>Failed to connect to ${url}: ${errorMessage}</p>` + logsDiv.innerHTML;
+                    console.log(`Failed to connect to ${url}: ${errorMessage}`);
                 }
             }
             
             statusDiv.textContent = 'API Offline: Failed to connect to any endpoint. Make sure the server is running.';
             statusDiv.className = 'status offline';
+            logsDiv.innerHTML = '<p>All connection attempts failed. Check if your server is running.</p>' + logsDiv.innerHTML;
         }
         
         async function searchProduct() {
@@ -164,20 +225,29 @@
             rawResponseDiv.style.display = 'none';
             
             try {
+                console.log(`Sending request to ${API_URL}/search_product with product name: ${productName}`);
+                
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+                
                 const response = await fetch(`${API_URL}/search_product`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ product_name: productName })
+                    body: JSON.stringify({ product_name: productName }),
+                    signal: controller.signal
                 });
+                
+                clearTimeout(timeoutId);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
                 }
                 
                 const data = await response.json();
+                console.log('Received response:', data);
                 
                 if (data.success) {
                     // Display the product data
@@ -216,7 +286,11 @@
                     resultDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
                 }
             } catch (error) {
-                resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                let errorMessage = error.message;
+                if (error.name === 'AbortError') {
+                    errorMessage = 'Request timed out after 30 seconds. The server might be busy or not responding.';
+                }
+                resultDiv.innerHTML = `<p class="error">Error: ${errorMessage}</p>`;
                 console.error('Search product error:', error);
             }
         }
