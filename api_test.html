@@ -3,35 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API Test</title>
+    <title>API Test with Raw Responses</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; }
         .result { margin-top: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
         th { background-color: #f2f2f2; }
         .error { color: red; }
+        .status { margin-top: 10px; padding: 5px; border-radius: 3px; }
+        .status.online { background-color: #d4edda; color: #155724; }
+        .status.offline { background-color: #f8d7da; color: #721c24; }
+        textarea { width: 100%; min-height: 100px; }
+        .raw-response { 
+            background-color: #f8f9fa; 
+            padding: 10px; 
+            border: 1px solid #ddd; 
+            border-radius: 5px; 
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .tab-container {
+            margin-top: 20px;
+        }
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+            border-radius: 5px 5px 0 0;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 10px 16px;
+            transition: 0.3s;
+        }
+        .tab button:hover {
+            background-color: #ddd;
+        }
+        .tab button.active {
+            background-color: #ccc;
+        }
+        .tabcontent {
+            display: none;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 5px 5px;
+        }
+        .show {
+            display: block;
+        }
     </style>
 </head>
 <body>
     <h1>Product Search API Test</h1>
     
-    <div>
-        <h2>Search Product</h2>
-        <input type="text" id="productName" placeholder="Enter product name">
-        <button onclick="searchProduct()">Search</button>
-        <div id="productResult" class="result"></div>
-    </div>
+    <div id="apiStatus" class="status offline">Checking API connection...</div>
     
-    <div>
-        <h2>Search Ingredients</h2>
-        <textarea id="ingredients" placeholder="Enter ingredients, one per line"></textarea>
-        <button onclick="searchIngredients()">Search</button>
-        <div id="ingredientsResult" class="result"></div>
+    <div class="tab-container">
+        <div class="tab">
+            <button class="tablinks active" onclick="openTab(event, 'ProductTab')">Search Product</button>
+            <button class="tablinks" onclick="openTab(event, 'IngredientsTab')">Search Ingredients</button>
+        </div>
+        
+        <div id="ProductTab" class="tabcontent show">
+            <h2>Search Product</h2>
+            <input type="text" id="productName" placeholder="Enter product name">
+            <button onclick="searchProduct()">Search</button>
+            <div id="productResult" class="result"></div>
+            <div id="rawProductResponse" class="raw-response" style="display: none;"></div>
+        </div>
+        
+        <div id="IngredientsTab" class="tabcontent">
+            <h2>Search Ingredients</h2>
+            <textarea id="ingredients" placeholder="Enter ingredients, one per line"></textarea>
+            <button onclick="searchIngredients()">Search</button>
+            <div id="ingredientsResult" class="result"></div>
+            <div id="rawIngredientsContainer" style="margin-top: 20px;"></div>
+        </div>
     </div>
 
     <script>
-        const API_URL = 'http://localhost:10000';
+        // Try different API URLs if one fails
+        const API_URLS = [
+            'http://localhost:10000',
+            'http://127.0.0.1:10000',
+            'http://0.0.0.0:10000'
+        ];
+        
+        let API_URL = API_URLS[0]; // Default to first URL
+        
+        // Check API connection on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            checkApiConnection();
+            document.getElementById('ProductTab').style.display = 'block';
+        });
+        
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+        
+        async function checkApiConnection() {
+            const statusDiv = document.getElementById('apiStatus');
+            
+            for (const url of API_URLS) {
+                try {
+                    const response = await fetch(`${url}/`, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        API_URL = url;
+                        statusDiv.textContent = `API Connected: ${API_URL}`;
+                        statusDiv.className = 'status online';
+                        return;
+                    }
+                } catch (error) {
+                    console.log(`Failed to connect to ${url}: ${error.message}`);
+                }
+            }
+            
+            statusDiv.textContent = 'API Offline: Failed to connect to any endpoint. Make sure the server is running.';
+            statusDiv.className = 'status offline';
+        }
         
         async function searchProduct() {
             const productName = document.getElementById('productName').value;
@@ -40,20 +157,30 @@
                 return;
             }
             
+            const resultDiv = document.getElementById('productResult');
+            const rawResponseDiv = document.getElementById('rawProductResponse');
+            
+            resultDiv.innerHTML = '<p>Searching...</p>';
+            rawResponseDiv.style.display = 'none';
+            
             try {
                 const response = await fetch(`${API_URL}/search_product`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     },
                     body: JSON.stringify({ product_name: productName })
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                
                 const data = await response.json();
-                const resultDiv = document.getElementById('productResult');
                 
                 if (data.success) {
-                    // Display the simplified three-column structure
+                    // Display the product data
                     resultDiv.innerHTML = `
                         <h3>Product Found (Source: ${data.source})</h3>
                         <table>
@@ -69,11 +196,28 @@
                             </tr>
                         </table>
                     `;
+                    
+                    // Display raw response if available
+                    if (data.raw_openai_response) {
+                        rawResponseDiv.textContent = data.raw_openai_response;
+                        rawResponseDiv.style.display = 'block';
+                        resultDiv.innerHTML += '<h3>Raw OpenAI Response:</h3>';
+                        resultDiv.appendChild(rawResponseDiv);
+                    }
+                    
+                    // Display parsed details if available
+                    if (data.parsed_details) {
+                        resultDiv.innerHTML += `
+                            <h3>Parsed Details:</h3>
+                            <pre>${JSON.stringify(data.parsed_details, null, 2)}</pre>
+                        `;
+                    }
                 } else {
                     resultDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
                 }
             } catch (error) {
-                document.getElementById('productResult').innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                console.error('Search product error:', error);
             }
         }
         
@@ -85,18 +229,27 @@
             }
             
             const ingredients = ingredientsText.split('\n').map(i => i.trim()).filter(i => i);
+            const resultDiv = document.getElementById('ingredientsResult');
+            const rawContainer = document.getElementById('rawIngredientsContainer');
+            
+            resultDiv.innerHTML = '<p>Searching...</p>';
+            rawContainer.innerHTML = '';
             
             try {
                 const response = await fetch(`${API_URL}/search_ingredients`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     },
                     body: JSON.stringify({ ingredients })
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                
                 const data = await response.json();
-                const resultDiv = document.getElementById('ingredientsResult');
                 
                 if (data.success) {
                     let html = '<h3>Ingredients Found</h3>';
@@ -108,15 +261,23 @@
                                     <th>Name</th>
                                     <th>Index</th>
                                     <th>Description</th>
+                                    <th>Formulation Details</th>
+                                    <th>Technical Details</th>
+                                    <th>Product Page Link</th>
+                                    <th>Search Tier</th>
                                 </tr>
                         `;
                         
                         data.ingredients.forEach(ingredient => {
                             html += `
                                 <tr>
-                                    <td>${ingredient.name}</td>
-                                    <td>${ingredient.index}</td>
-                                    <td>${ingredient.text_description}</td>
+                                    <td>${ingredient.name || ''}</td>
+                                    <td>${ingredient.index || ''}</td>
+                                    <td>${ingredient.text_description || ''}</td>
+                                    <td>${ingredient.formulation_details || ''}</td>
+                                    <td>${ingredient.technical_details || ''}</td>
+                                    <td><a href="${ingredient.product_page_link || '#'}" target="_blank">${ingredient.product_page_link || ''}</a></td>
+                                    <td>${ingredient.search_tier || ''}</td>
                                 </tr>
                             `;
                         });
@@ -131,11 +292,29 @@
                     }
                     
                     resultDiv.innerHTML = html;
+                    
+                    // Display raw responses
+                    if (data.raw_responses) {
+                        rawContainer.innerHTML = '<h3>Raw OpenAI Responses:</h3>';
+                        
+                        for (const [ingredient, rawResponse] of Object.entries(data.raw_responses)) {
+                            const rawDiv = document.createElement('div');
+                            rawDiv.innerHTML = `<h4>${ingredient}</h4>`;
+                            
+                            const pre = document.createElement('pre');
+                            pre.className = 'raw-response';
+                            pre.textContent = rawResponse;
+                            
+                            rawDiv.appendChild(pre);
+                            rawContainer.appendChild(rawDiv);
+                        }
+                    }
                 } else {
                     resultDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
                 }
             } catch (error) {
-                document.getElementById('ingredientsResult').innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                console.error('Search ingredients error:', error);
             }
         }
     </script>

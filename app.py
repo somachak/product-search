@@ -260,82 +260,51 @@ def search_ingredients():
     if not ingredients:
         return jsonify({"error": "At least one ingredient is required"}), 400
     
-    results = []
-    not_found = []
-    
-    # Define the search tiers
-    search_tiers = [
-        {
-            "name": "Primary Sources",
-            "sites": ["myskinrecipes.com"]
-        },
-        {
-            "name": "Secondary Sources",
-            "sites": [
-                "theformulary.co.uk", 
-                "aromantic.co.uk", 
-                "mysticmomentsuk.com", 
-                "thesoapery.co.uk", 
-                "thesoapkitchen.co.uk", 
-                "suppliesforcandles.co.uk", 
-                "hybridingredients.co.uk", 
-                "naturallythinking.com", 
-                "bayhousearomantics.com", 
-                "alexmo-cosmetics.de", 
-                "naturallybalmy.co.uk"
-            ]
-        },
-        {
-            "name": "Tertiary Sources",
-            "sites": ["Specialchem", "ULProspector"]
-        }
-    ]
-    
     try:
+        results = []
+        raw_responses = {}
+        not_found = []
+        
         for ingredient in ingredients:
-            # Check if ingredient already exists in database
-            existing = supabase.table("products").select("*").eq("product_name", ingredient).eq("item_type", "ingredient").execute()
-            
-            if existing.data:
-                # Return existing data if found
-                results.append(existing.data[0])
-                continue
-            
-            # Initialize variables to track search success
             ingredient_found = False
-            search_source = ""
-            ingredient_details = None
+            ingredient_details = {}
+            search_source = "None"
+            raw_response = ""
             
-            # Try each search tier until ingredient is found
+            # Define search tiers
+            search_tiers = [
+                {
+                    "name": "Cosmetic Ingredient Sites",
+                    "sites": ["myskinrecipes.com", "makingcosmetics.com", "lotioncrafter.com"]
+                },
+                {
+                    "name": "General Cosmetic Resources",
+                    "sites": ["cosmeticsinfo.org", "ewg.org", "incidecoder.com"]
+                },
+                {
+                    "name": "Scientific Sources",
+                    "sites": ["pubmed.ncbi.nlm.nih.gov", "scholar.google.com"]
+                }
+            ]
+            
+            # Try each search tier until we find information
             for tier in search_tiers:
                 if ingredient_found:
                     break
                 
-                sites_list = ", ".join(tier["sites"])
+                # Create search prompt for this tier
+                sites_str = ", ".join(tier["sites"])
+                system_prompt = f"You are a cosmetic formulation assistant. Search for detailed information about cosmetic ingredients primarily on these sites: {sites_str}. Provide comprehensive details about each ingredient."
                 
-                # Using the exact system prompt from the playground
-                system_prompt = """Search for single or bulk ingredients provided by the user on myskinrecipes.com and return detailed descriptions, formulation information, and technical details. This includes usage rates, regional compliance, and links to the product page. Also, suggest popular products using these ingredients from EWG Skin Deep and INCIDECODER.com."""
-                
-                # Using the exact user prompt structure from the playground
-                user_prompt = f"""Search for detailed information about the ingredient '{ingredient}' on the following websites: {sites_list}.
-
-Please provide:
-1. A detailed description of the ingredient
-2. Formulation details including usage rates and recommended applications
-3. Technical details such as regional compliance information
-4. A direct link to the product page
-5. Popular products using this ingredient from EWG Skin Deep and INCIDECODER.com
-
-Format your response in a structured way with clear headings for each section."""
+                user_prompt = f"Please provide detailed information about the cosmetic ingredient '{ingredient}', including:\n\n1. A detailed description of what it is and its purpose in cosmetic formulations\n2. Formulation details including recommended usage rates\n3. Technical details such as solubility, pH, and regional compliance information\n4. A direct link to the product page\n5. Popular products using this ingredient from EWG Skin Deep and INCIDECODER.com\n\nFormat your response in a structured way with clear headings for each section."
                 
                 try:
-                    # Make the API call with the exact prompts from playground
+                    # Make the API call
                     response = client.chat.completions.create(
                         model="gpt-4o-search-preview",
                         web_search_options={
                             "search_context_size": "high",
                         },
-                        # Remove the temperature parameter as it's causing the error
                         messages=[
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt}
@@ -344,6 +313,7 @@ Format your response in a structured way with clear headings for each section.""
                     
                     # Extract the text content
                     full_text = response.choices[0].message.content
+                    raw_response = full_text
                     
                     # Extract citations if available
                     citations = []
@@ -362,7 +332,7 @@ Format your response in a structured way with clear headings for each section.""
                     # If not found in this tier, continue to next tier
                     continue
                 
-                # Parse the text into structured data - improved parsing
+                # Parse the text into structured data
                 try:
                     # Create a more structured parsing approach
                     import re
@@ -449,28 +419,18 @@ Format your response in a structured way with clear headings for each section.""
                         ingredient_found = True
                         ingredient_details = parsed_details
                         search_source = tier["name"]
+                        raw_responses[ingredient] = raw_response
                         
-                        # Store in database
-                        import json
-                        # When storing in database, simplify to 3 columns
-                        data = {
-                            "product_name": ingredient,
-                            "description": ingredient_details.get("description", ""),
-                            "item_type": "ingredient"
-                        }
-                        
-                        # Insert into database
-                        result = supabase.table("products").insert(data).execute()
-                        
-                        if result.data:
-                            # Add to results with simplified structure
-                            results.append({
-                                "name": ingredient,
-                                "index": result.data[0]['id'],
-                                "text_description": ingredient_details.get("description", "")
-                            })
-                        else:
-                            not_found.append(ingredient)
+                        # Skip database operations
+                        results.append({
+                            "name": ingredient,
+                            "index": "N/A (Database bypassed)",
+                            "text_description": ingredient_details.get("description", ""),
+                            "formulation_details": ingredient_details.get("formulation_details", ""),
+                            "technical_details": ingredient_details.get("technical_details", ""),
+                            "product_page_link": ingredient_details.get("product_page_link", ""),
+                            "search_tier": search_source
+                        })
                 except Exception as e:
                     print(f"Error parsing ingredient details: {e}")
                     continue
@@ -482,7 +442,8 @@ Format your response in a structured way with clear headings for each section.""
         # Return all ingredient details to the client
         response_data = {
             "success": True,
-            "ingredients": results
+            "ingredients": results,
+            "raw_responses": raw_responses
         }
         
         if not_found:
